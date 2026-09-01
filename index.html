@@ -109,6 +109,15 @@ a:hover{border-bottom-color:var(--open)}
 .panel-close:focus-visible{outline:2px solid var(--open);outline-offset:2px}
 .panel h2{font-size:22px;margin:0;font-weight:600}
 .panel .sub{color:var(--muted);font-size:13px;margin:3px 0 22px}
+.biz{border-top:1px solid var(--rule);padding:14px 0 4px;margin-bottom:6px}
+.biz-main{font-size:15px;color:var(--ink);font-weight:500}
+.biz-mix{font-size:12.5px;color:var(--ink-soft);margin-top:5px;line-height:1.7}
+.biz-fin{display:flex;flex-wrap:wrap;gap:22px;margin-top:12px}
+.biz-fin div{font-size:12px;color:var(--muted)}
+.biz-fin b{display:block;font-size:17px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;margin-top:1px}
+.biz-fin b.neg{color:var(--open)}
+.biz-note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.6}
+.sec-h{font-size:12px;color:var(--muted);margin:20px 0 6px}
 .stat{display:flex;gap:26px;padding:14px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-bottom:24px}
 .stat div{font-size:13px;color:var(--muted)}
 .stat b{display:block;font-size:19px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
@@ -162,6 +171,9 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
     <button class="panel-close" id="dClose" aria-label="關閉">&times;</button>
     <h2 id="dTitle"></h2>
     <p class="sub" id="dSub"></p>
+    <div class="sec-h">本業</div>
+    <div class="biz" id="dBiz"></div>
+    <div class="sec-h">題材曝險</div>
     <div class="stat" id="dStat"></div>
     <div id="dSigs"></div>
     <p class="nodisc" id="dRev"></p>
@@ -181,7 +193,7 @@ const REV_RANK = {'已單獨揭露':3, '有但未單獨揭露':2, '':1};
 const rank = t => TIERS.length - TIERS.findIndex(x => x.k === t);
 const DAY = 864e5;
 
-let SIGNALS = [], COMPANIES = [], MODE = 'all';
+let SIGNALS = [], COMPANIES = [], INFO = {}, MODE = 'all';
 
 const gviz = sheet =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}`;
@@ -247,7 +259,7 @@ function build(){
       .filter(v => v && v !== '自營'))];
     return {
       ticker, sigs, maxTier, flags, rev, via,
-      name: sigs[0].company || NAMES[ticker] || ticker,
+      name: (INFO[ticker] && INFO[ticker].name) || NAMES[ticker] || ticker,
       role: sigs[0].role || '',
       firstL3: l3[0] || null,
       pending: sigs.filter(s => s.tier === '?').length,
@@ -332,6 +344,26 @@ function openDetail(ticker){
   document.getElementById('dTitle').textContent = `${c.name} ${c.ticker}`;
   document.getElementById('dSub').textContent =
     [c.role, '矽光子曝險'].filter(Boolean).join(' · ');
+  const f = INFO[c.ticker];
+  const num = (v, suf) => {
+    if(!v) return '<b>—</b>';
+    const neg = String(v).trim().startsWith('-');
+    return `<b class="${neg ? 'neg' : ''}">${v}${suf || ''}</b>`;
+  };
+  document.getElementById('dBiz').innerHTML = f ? `
+    <div class="biz-main">${f.main_business || '—'}</div>
+    ${f.business_mix ? `<div class="biz-mix">${f.business_mix}</div>` : ''}
+    <div class="biz-fin">
+      <div>${f.quarter || ''} EPS ${num(f.eps_q)}</div>
+      <div>近四季 EPS ${num(f.eps_ttm)}</div>
+      <div>營益率 ${num(f.op_margin)}</div>
+      <div>毛利率 ${num(f.gross_margin)}</div>
+      <div>股價 ${num(f.price)}</div>
+    </div>
+    ${f.note ? `<div class="biz-note">${f.note}</div>` : ''}
+    ${f.source_url ? `<div class="biz-note"><a href="${f.source_url}" target="_blank" rel="noopener">出處</a>
+      ${f.as_of ? ` · 資料日 ${f.as_of}` : ''}${f.verified === 'no' ? ' · 未驗證' : ''}</div>` : ''}`
+    : '<div class="biz-note">companies 分頁沒有這家公司的資料</div>';
   const t = c.maxTier ? TIERS.find(x => x.k === c.maxTier) : null;
   document.getElementById('dStat').innerHTML = `
     <div>最高已達成<b>${t ? t.k + ' ' + t.name : '—'}</b></div>
@@ -395,6 +427,8 @@ function fallback(msg){
       document.getElementById('themeAlias').textContent =
         al.length ? '別名 ' + al.join('、') : '';
     }
+    const co = await readSheet('companies').catch(() => []);
+    co.forEach(r => { if(r.ticker) INFO[r.ticker] = r; });
     SIGNALS = await readSheet('signals');
     if(!SIGNALS.length){ fallback('signals 分頁還沒有資料'); return; }
     build(); render();
