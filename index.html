@@ -231,8 +231,10 @@ const DAY = 864e5;
 
 let SIGNALS = [], COMPANIES = [], INFO = {}, MODE = 'all';
 
+// headers=1 強制把第一列當標題。全文字的分頁（themes/companies）gviz 認不出標題列，
+// 會把它當成資料，欄位名變成 A、B、C。
 const gviz = sheet =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}`;
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`;
 
 // gviz 會把日期欄回成 "Date(2026,7,25)"，月份從 0 起算，要轉回 YYYY-MM-DD
 function cellVal(cell){
