@@ -206,10 +206,8 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
     <p class="sub" id="dSub"></p>
     <div class="sec-h">本業</div>
     <div class="biz" id="dBiz"></div>
-    <div class="sec-h">題材曝險</div>
-    <div class="stat" id="dStat"></div>
-    <div id="dSigs"></div>
-    <div id="dOther"></div>
+    <div class="sec-h">跨足方向</div>
+    <div id="dThemes"></div>
     <p class="nodisc" id="dRev"></p>
   </div>
 </div>
@@ -315,14 +313,17 @@ function build(){
     const maxTier = [...held].sort((a,b) => rank(b) - rank(a))[0] || null;
     const l3 = sigs.filter(s => /^L[3-5]$/.test(s.tier)).map(s => s.date).filter(Boolean).sort();
     const flags = [];
-    if(held.has('L4') && !held.has('L3')) flags.push({t:'跳階'});
+    // 訊號太少時不出旗標：兩三則資料談不上斷層
+    const enough = sigs.length >= 4;
+    if(enough && held.has('L4') && !held.has('L3')) flags.push({t:'跳階'});
     // 靜默投入＝已投入但公司從沒公開講過。看的是有無公司自述訊號，不是有無 L2 那一階，
     // 否則同一場法說會既揭露資本支出（L4）又是表態（L2）時會誤判。
     const spoke = sigs.some(s => s.speaker === '公司自述');
     const invested = [...held].some(t => rank(t) >= rank('L3'));
-    if(invested && !spoke) flags.push({t:'靜默投入', hot:true});
+    if(enough && invested && !spoke) flags.push({t:'靜默投入', hot:true});
     const l1n = sigs.filter(s => s.tier === 'L1').length;
-    if(maxTier && rank(maxTier) <= rank('L2') && l1n >= 4) flags.push({t:'倒掛（依 L1 訊號量推估）'});
+    if(enough && maxTier && rank(maxTier) <= rank('L2') && l1n >= 4)
+      flags.push({t:'倒掛（依 L1 訊號量推估）'});
     const rev = sigs.map(s => s.revenue).filter(Boolean)
       .sort((a,b) => (REV_RANK[b]||0) - (REV_RANK[a]||0))[0] || '';
     const via = [...new Set(sigs.map(s => s.parent_relation)
@@ -415,7 +416,7 @@ function openDetail(ticker){
   const c = COMPANIES.find(x => x.ticker === ticker); if(!c) return;
   document.getElementById('dTitle').textContent = `${c.name} ${c.ticker}`;
   document.getElementById('dSub').textContent =
-    [c.role, '矽光子曝險'].filter(Boolean).join(' · ');
+    [c.role, INFO[c.ticker] && INFO[c.ticker].industry].filter(Boolean).join(' · ');
   const f = INFO[c.ticker];
   const num = (v, suf) => {
     if(!v) return '<b>—</b>';
@@ -436,44 +437,34 @@ function openDetail(ticker){
     ${f.source_url ? `<div class="biz-note"><a href="${f.source_url}" target="_blank" rel="noopener">出處</a>
       ${f.as_of ? ` · 資料日 ${f.as_of}` : ''}${f.verified === 'no' ? ' · 未驗證' : ''}</div>` : ''}`
     : '<div class="biz-note">companies 分頁沒有這家公司的資料</div>';
-  const t = c.maxTier ? TIERS.find(x => x.k === c.maxTier) : null;
-  document.getElementById('dStat').innerHTML = `
-    <div>最高已達成<b>${t ? t.k + ' ' + t.name : '—'}</b></div>
-    <div>首次達 L3<b>${c.firstL3 || '—'}</b></div>
-    <div>訊號<b>${c.sigs.length}</b></div>
-    <div>待判<b>${c.pending}</b></div>`;
-  document.getElementById('dSigs').innerHTML = c.sigs.map(s => `
-    <div class="sig">
-      <div class="sig-l">${s.date}<b class="${s.tier === '?' ? 'q' : ''}">${s.tier} ${s.signal_type || ''}</b></div>
-      <div>
-        <div class="sig-c">${s.content}${s.value ? `（${s.value}）` : ''}</div>
-        <div class="sig-m">${[s.source_type, s.speaker && s.speaker !== '—' ? s.speaker : '']
-          .filter(Boolean).join(' · ')}
-          ${s.source_url ? ` · <a href="${s.source_url}" target="_blank" rel="noopener">出處</a>` : ''}
-          ${s.verified === 'no' ? ' · 未驗證' : ''}</div>
+  // 所有題材一視同仁，當前題材排最前面
+  const all = {};
+  [...c.sigs, ...c.other].forEach(x => (all[x.theme_id] = all[x.theme_id] || []).push(x));
+  const order = Object.keys(all).sort((a, b) => (b === THEME) - (a === THEME));
+  document.getElementById('dThemes').innerHTML = order.length ? order.map(id => {
+    const list = all[id].slice().sort((x, y) => (y.date || '').localeCompare(x.date || ''));
+    const held = list.map(x => x.tier).filter(x => /^L[1-4]$/.test(x));
+    const top = held.sort((a, b) => rank(b) - rank(a))[0];
+    const q = list.filter(x => x.tier === '?').length;
+    const rv = list.map(x => x.revenue).filter(Boolean)
+      .sort((a, b) => (REV_RANK[b] || 0) - (REV_RANK[a] || 0))[0];
+    const tt = top ? TIERS.find(x => x.k === top) : null;
+    return `<div class="tblock">
+      <div class="tblock-h">
+        <span>${themeName(id)}${isFormal(id) ? '' : '<i class="cand">候選</i>'}</span>
+        <span>${tt ? tt.k + ' ' + tt.name : '未定'} · ${rv || '尚無營收'} · ${list.length} 則${q ? ` · ${q} 則待判` : ''}</span>
       </div>
-    </div>`).join('');
-  const byTheme = {};
-  c.other.forEach(s => (byTheme[s.theme_id] = byTheme[s.theme_id] || []).push(s));
-  document.getElementById('dOther').innerHTML = Object.keys(byTheme).length
-    ? `<div class="sec-h">其他題材</div>` + Object.entries(byTheme).map(([id, list]) => {
-        const held = list.map(x => x.tier).filter(x => /^L[1-4]$/.test(x));
-        const top = held.sort((a, b) => rank(b) - rank(a))[0] || '—';
-        return `<div class="tblock">
-          <div class="tblock-h">
-            <span>${themeName(id)}${isFormal(id) ? '' : '<i class="cand">候選</i>'}</span>
-            <span>${top} · ${list.length} 則</span>
-          </div>
-          ${list.map(s => `<div class="sig">
-            <div class="sig-l">${s.date}<b class="${s.tier === '?' ? 'q' : ''}">${s.tier} ${s.signal_type || ''}</b></div>
-            <div><div class="sig-c">${s.content}</div>
-              ${s.source_url ? `<div class="sig-m"><a href="${s.source_url}" target="_blank" rel="noopener">出處</a></div>` : ''}
-            </div></div>`).join('')}
-        </div>`;
-      }).join('')
-    : '';
-  document.getElementById('dRev').textContent =
-    c.rev ? `營收狀態：${c.rev}` : '營收狀態：尚無營收';
+      ${list.map(x => `<div class="sig">
+        <div class="sig-l">${x.date}<b class="${x.tier === '?' ? 'q' : ''}">${x.tier} ${x.signal_type || ''}</b></div>
+        <div><div class="sig-c">${x.content}${x.value ? `（${x.value}）` : ''}</div>
+          <div class="sig-m">${[x.source_type, x.speaker && x.speaker !== '—' ? x.speaker : '',
+              x.parent_relation && x.parent_relation !== '自營' ? x.parent_relation : '']
+              .filter(Boolean).join(' · ')}
+            ${x.source_url ? ` · <a href="${x.source_url}" target="_blank" rel="noopener">出處</a>` : ''}
+            ${x.verified === 'no' ? ' · 未驗證' : ''}</div>
+        </div></div>`).join('')}
+    </div>`;
+  }).join('') : '<div class="biz-note">這家公司沒有任何題材訊號</div>';
   location.hash = ticker;
   document.getElementById('detail').dataset.open = 'true';
   document.getElementById('dClose').focus();
