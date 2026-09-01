@@ -300,43 +300,41 @@ function paintHead(){
     : '候選題材：尚未在 themes 分頁立案，沒有邊界規則，階層僅供參考';
 }
 
+// 依當前題材彙總單一公司；不論這家公司有沒有本題材的訊號都做得出來
+function makeCompany(ticker){
+  const mine = SIGNALS.filter(x => x.ticker === ticker && x.theme_id === THEME);
+  const other = SIGNALS.filter(x => x.ticker === ticker && x.theme_id !== THEME)
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const sigs = mine.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const held = new Set(sigs.map(x => x.tier).filter(t => /^L[1-4]$/.test(t)));
+  const maxTier = [...held].sort((a,b) => rank(b) - rank(a))[0] || null;
+  const l3 = sigs.filter(x => /^L[3-4]$/.test(x.tier)).map(x => x.date).filter(Boolean).sort();
+  const flags = [];
+  const enough = sigs.length >= 4;   // 訊號太少時不出旗標
+  if(enough && held.has('L4') && !held.has('L3')) flags.push({t:'跳階'});
+  const spoke = sigs.some(x => x.speaker === '公司自述');
+  const invested = [...held].some(t => rank(t) >= rank('L3'));
+  if(enough && invested && !spoke) flags.push({t:'靜默投入', hot:true});
+  const l1n = sigs.filter(x => x.tier === 'L1').length;
+  if(enough && maxTier && rank(maxTier) <= rank('L2') && l1n >= 4)
+    flags.push({t:'倒掛（依 L1 訊號量推估）'});
+  const rev = sigs.map(x => x.revenue).filter(Boolean)
+    .sort((a,b) => (REV_RANK[b]||0) - (REV_RANK[a]||0))[0] || '';
+  const via = [...new Set(sigs.map(x => x.parent_relation).filter(v => v && v !== '自營'))];
+  return {
+    ticker, sigs, other, maxTier, flags, rev, via,
+    name: (INFO[ticker] && INFO[ticker].name) || NAMES[ticker] || ticker,
+    role: (sigs[0] || other[0] || {}).role || '',
+    firstL3: l3[0] || null,
+    pending: sigs.filter(x => x.tier === '?').length,
+  };
+}
+
+// 階梯頁只列有本題材訊號的公司
 function build(){
-  const by = {}, elsewhere = {};
-  SIGNALS.forEach(s => {
-    const t = s.ticker; if(!t) return;
-    if(s.theme_id === THEME) (by[t] = by[t] || []).push(s);
-    else (elsewhere[t] = elsewhere[t] || []).push(s);
-  });
-  COMPANIES = Object.entries(by).map(([ticker, sigs]) => {
-    sigs.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
-    const held = new Set(sigs.map(s => s.tier).filter(t => /^L[1-5]$/.test(t)));
-    const maxTier = [...held].sort((a,b) => rank(b) - rank(a))[0] || null;
-    const l3 = sigs.filter(s => /^L[3-5]$/.test(s.tier)).map(s => s.date).filter(Boolean).sort();
-    const flags = [];
-    // 訊號太少時不出旗標：兩三則資料談不上斷層
-    const enough = sigs.length >= 4;
-    if(enough && held.has('L4') && !held.has('L3')) flags.push({t:'跳階'});
-    // 靜默投入＝已投入但公司從沒公開講過。看的是有無公司自述訊號，不是有無 L2 那一階，
-    // 否則同一場法說會既揭露資本支出（L4）又是表態（L2）時會誤判。
-    const spoke = sigs.some(s => s.speaker === '公司自述');
-    const invested = [...held].some(t => rank(t) >= rank('L3'));
-    if(enough && invested && !spoke) flags.push({t:'靜默投入', hot:true});
-    const l1n = sigs.filter(s => s.tier === 'L1').length;
-    if(enough && maxTier && rank(maxTier) <= rank('L2') && l1n >= 4)
-      flags.push({t:'倒掛（依 L1 訊號量推估）'});
-    const rev = sigs.map(s => s.revenue).filter(Boolean)
-      .sort((a,b) => (REV_RANK[b]||0) - (REV_RANK[a]||0))[0] || '';
-    const via = [...new Set(sigs.map(s => s.parent_relation)
-      .filter(v => v && v !== '自營'))];
-    return {
-      ticker, sigs, maxTier, flags, rev, via,
-      other: (elsewhere[ticker] || []).sort((a,b) => (b.date||'').localeCompare(a.date||'')),
-      name: (INFO[ticker] && INFO[ticker].name) || NAMES[ticker] || ticker,
-      role: sigs[0].role || '',
-      firstL3: l3[0] || null,
-      pending: sigs.filter(s => s.tier === '?').length,
-    };
-  });
+  const ids = [...new Set(SIGNALS.filter(x => x.theme_id === THEME)
+    .map(x => x.ticker).filter(Boolean))];
+  COMPANIES = ids.map(makeCompany);
 }
 
 function render(){
@@ -413,7 +411,7 @@ function renderPending(){
 }
 
 function openDetail(ticker){
-  const c = COMPANIES.find(x => x.ticker === ticker); if(!c) return;
+  const c = COMPANIES.find(x => x.ticker === ticker) || makeCompany(ticker);
   document.getElementById('dTitle').textContent = `${c.name} ${c.ticker}`;
   document.getElementById('dSub').textContent =
     [c.role, INFO[c.ticker] && INFO[c.ticker].industry].filter(Boolean).join(' · ');
@@ -474,9 +472,10 @@ function openDetail(ticker){
 function lookup(){
   const t = document.getElementById('q').value.trim();
   if(!t) return;
-  const hit = COMPANIES.find(c => c.ticker === t);
   document.getElementById('miss').innerHTML = '';
-  if(hit){ location.hash = t; openDetail(t); return; }
+  // 跨題材搜尋：只要 signals 或 companies 任一處有這個代號就開個股頁
+  const known = SIGNALS.some(s => s.ticker === t) || !!INFO[t];
+  if(known){ openDetail(t); return; }
   const name = (INFO[t] && INFO[t].name) || '';
   document.getElementById('miss').innerHTML = `
     <div class="miss">
@@ -570,7 +569,7 @@ function fallback(msg){
     initThemes();
     build(); render();
     const h = decodeURIComponent(location.hash.replace('#',''));
-    if(h && COMPANIES.some(c => c.ticker === h)) openDetail(h);
+    if(h && (SIGNALS.some(s => s.ticker === h) || INFO[h])) openDetail(h);
   }catch(err){
     fallback('讀不到 Google Sheet（' + err.message + '）');
   }
