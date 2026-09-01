@@ -41,6 +41,14 @@ h1{font-size:30px;font-weight:600;letter-spacing:-.01em;margin:0}
 .tally b{font-weight:600;font-variant-numeric:tabular-nums}
 .tally .open{color:var(--open);font-weight:600}
 
+.themepick{display:flex;align-items:center;gap:10px;margin-top:6px}
+.themepick select{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--rule);border-radius:3px;background:var(--card);color:var(--ink)}
+.themepick select:focus-visible{outline:2px solid var(--open);outline-offset:1px}
+.tblock{border:1px solid var(--rule);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px}
+.tblock-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.tblock-h span:first-child{font-size:14px;color:var(--ink);font-weight:500}
+.tblock-h span:last-child{font-size:12px;color:var(--text-secondary,var(--ink-soft))}
+.cand{font-size:11px;padding:2px 7px;border-radius:2px;background:var(--open-bg);color:var(--open);margin-left:6px}
 .search{display:flex;gap:8px;margin:22px 0 0;max-width:420px}
 .search input{
   flex:1;font:inherit;font-size:14px;padding:9px 12px;
@@ -175,6 +183,11 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
     <button id="go">查</button>
   </div>
 
+  <div class="themepick">
+    <label for="themeSel" style="font-size:12.5px;color:var(--muted)">題材</label>
+    <select id="themeSel"></select>
+  </div>
+
   <div class="modes" role="tablist">
     <button role="tab" aria-selected="true" data-mode="all">全部公司</button>
     <button role="tab" aria-selected="false" data-mode="recent">近半年升上 L3</button>
@@ -203,7 +216,8 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
 
 <script>
 const SHEET_ID = '1-6j_9R8EtIS780FRKBv4MPAq63ySaBghRSPW2rDA48U';
-const THEME = 'silicon-photonics';   // 本頁只算這個題材的訊號
+let THEME = 'silicon-photonics';     // 階梯頁當前題材，可切換
+let THEMES = {};                     // theme_id -> {正名, 別名, 上層題材}
 const TIERS = [
   {k:'L4', name:'不可逆', hint:'錢已花掉'},
   {k:'L3', name:'已投入', hint:'資源已投，撤回有損失'},
@@ -254,6 +268,31 @@ function parseTSV(text){
 }
 
 const NAMES = {'3081':'聯亞','6442':'光聖','3008':'大立光','3363':'上詮','3362':'先進光','3380':'明泰','2455':'全新','2330':'台積電'};
+
+const themeName = id => (THEMES[id] && THEMES[id]['正名']) || id;
+const isFormal  = id => !!THEMES[id];
+
+function initThemes(){
+  const ids = [...new Set(SIGNALS.map(s => s.theme_id).filter(Boolean))]
+    .sort((a, b) => (isFormal(b) - isFormal(a)) ||
+                    SIGNALS.filter(s => s.theme_id === b).length -
+                    SIGNALS.filter(s => s.theme_id === a).length);
+  if(!ids.includes(THEME)) THEME = ids[0] || THEME;
+  const sel = document.getElementById('themeSel');
+  sel.innerHTML = ids.map(id =>
+    `<option value="${id}"${id === THEME ? ' selected' : ''}>${themeName(id)}${isFormal(id) ? '' : '（候選）'}</option>`).join('');
+  sel.onchange = () => { THEME = sel.value; paintHead(); build(); render(); };
+  paintHead();
+}
+
+function paintHead(){
+  const t = THEMES[THEME];
+  document.getElementById('themeName').textContent = themeName(THEME);
+  const al = t ? (t['別名'] || '').split(',').map(x => x.trim()).filter(Boolean) : [];
+  document.getElementById('themeAlias').innerHTML = t
+    ? (al.length ? '別名 ' + al.join('、') : '')
+    : '候選題材：尚未在 themes 分頁立案，沒有邊界規則，階層僅供參考';
+}
 
 function build(){
   const by = {}, elsewhere = {};
@@ -406,12 +445,24 @@ function openDetail(ticker){
           ${s.verified === 'no' ? ' · 未驗證' : ''}</div>
       </div>
     </div>`).join('');
-  document.getElementById('dOther').innerHTML = c.other.length
-    ? `<div class="sec-h">其他題材（不計入本頁階層）</div>` + c.other.map(s => `
-        <div class="sig">
-          <div class="sig-l">${s.date}<b>${s.tier} ${s.theme_id}</b></div>
-          <div><div class="sig-c">${s.content}</div></div>
-        </div>`).join('')
+  const byTheme = {};
+  c.other.forEach(s => (byTheme[s.theme_id] = byTheme[s.theme_id] || []).push(s));
+  document.getElementById('dOther').innerHTML = Object.keys(byTheme).length
+    ? `<div class="sec-h">其他題材</div>` + Object.entries(byTheme).map(([id, list]) => {
+        const held = list.map(x => x.tier).filter(x => /^L[1-4]$/.test(x));
+        const top = held.sort((a, b) => rank(b) - rank(a))[0] || '—';
+        return `<div class="tblock">
+          <div class="tblock-h">
+            <span>${themeName(id)}${isFormal(id) ? '' : '<i class="cand">候選</i>'}</span>
+            <span>${top} · ${list.length} 則</span>
+          </div>
+          ${list.map(s => `<div class="sig">
+            <div class="sig-l">${s.date}<b class="${s.tier === '?' ? 'q' : ''}">${s.tier} ${s.signal_type || ''}</b></div>
+            <div><div class="sig-c">${s.content}</div>
+              ${s.source_url ? `<div class="sig-m"><a href="${s.source_url}" target="_blank" rel="noopener">出處</a></div>` : ''}
+            </div></div>`).join('')}
+        </div>`;
+      }).join('')
     : '';
   document.getElementById('dRev').textContent =
     c.rev ? `營收狀態：${c.rev}` : '營收狀態：尚無營收';
@@ -431,21 +482,37 @@ function lookup(){
   document.getElementById('miss').innerHTML = `
     <div class="miss">
       <h3>${t}${name ? ' ' + name : ''} 還沒判過</h3>
-      <p>這個代號在資料庫裡沒有訊號。按下面的按鈕複製指令，貼進 Claude 對話，
-         把回傳的 TSV 貼回 signals 分頁，重新整理就查得到了。</p>
+      <p>這個代號在資料庫裡沒有訊號。按鈕會複製一段指令，它不預設題材——
+         會先查本業，再列出這家公司正在切入哪些新方向。把回傳的兩段 TSV
+         分別貼回 companies 和 signals 分頁即可。新題材若要進階梯頁，
+         記得在 themes 分頁補一列並寫下邊界規則。</p>
       <button class="btn" id="cp">複製查詢指令</button><span class="copied" id="cpMsg"></span>
     </div>`;
   document.getElementById('cp').onclick = async () => {
-    const p = `依附件的階梯判定表 v2，分析 ${t} 在矽光子（silicon-photonics）的曝險。
+    const p = `分析台股 ${t}，分兩段輸出。不要預設題材。
 
-要求：
-- 只列近 12 個月、有公開出處的訊號
-- 每則標 tier（L1–L4 或 ?）、revenue、signal_type、speaker、parent_relation
-- 判不出階層的標 ?，在 content 註明卡在哪個定義，不要勉強給
-- 數字沒把握就留空，不要推估
-- 順便給 companies 分頁的本業資料（主要產品、營收組合、EPS、營益率、毛利率）
-- 輸出 TSV，欄序：date ticker theme_id role parent_relation tier revenue signal_type content value source_url source_type speaker event_id origin verified captured_at
-- origin 填 chat，verified 填 no`;
+第一段：本業
+主要產品、營收組合（各產品線佔比）、最新單季與近四季 EPS、營益率、毛利率。
+查不到的欄位留空，不要推估。輸出 companies 分頁的 TSV，欄序：
+ticker name industry main_business business_mix quarter eps_q eps_ttm op_margin gross_margin price note source_url as_of verified
+
+第二段：正在切入的新業務
+列出這家公司近 12 個月內有公開訊號、但還不是主要營收來源的方向。
+每個方向給一個 theme_id（英文小寫連字號），並說明這個題材的邊界是什麼。
+若該題材已存在於我的 themes 分頁就沿用既有 id。
+
+每則訊號依附件的階梯判定表 v2 判 tier：
+- L4 不可逆（載明用途的資本支出、建產線含試產線、已交割的併購換股、量產出貨、載明期間標的的長約）
+- L3 已投入（招募、專利公開、送樣、驗證中、通過認證、首張訂單）
+- L2 已表態（法說提及、新聞稿、參展、尚未完成的建置計畫）
+- L1 零成本（媒體貼標、分析師歸類）
+- revenue 三態：已單獨揭露／有但未單獨揭露／空
+- 判不出的標 ?，在 content 註明卡在哪個定義，不要勉強給
+- 數字沒把握就留空
+
+輸出 signals 分頁的 TSV，欄序：
+date ticker theme_id role parent_relation tier revenue signal_type content value source_url source_type speaker event_id origin verified captured_at
+origin 填 chat，verified 填 no`;
     try{ await navigator.clipboard.writeText(p);
          document.getElementById('cpMsg').textContent = '已複製'; }
     catch{ document.getElementById('cpMsg').textContent = '複製失敗，請手動選取'; }
@@ -503,6 +570,7 @@ function fallback(msg){
     co.forEach(r => { if(r.ticker) INFO[r.ticker] = r; });
     SIGNALS = await readSheet('signals');
     if(!SIGNALS.length){ fallback('signals 分頁還沒有資料'); return; }
+    initThemes();
     build(); render();
     const h = decodeURIComponent(location.hash.replace('#',''));
     if(h && COMPANIES.some(c => c.ticker === h)) openDetail(h);
