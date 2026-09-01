@@ -231,10 +231,8 @@ const DAY = 864e5;
 
 let SIGNALS = [], COMPANIES = [], INFO = {}, MODE = 'all';
 
-// headers=1 強制把第一列當標題。全文字的分頁（themes/companies）gviz 認不出標題列，
-// 會把它當成資料，欄位名變成 A、B、C。
 const gviz = sheet =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=1&sheet=${sheet}`;
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}`;
 
 // gviz 會把日期欄回成 "Date(2026,7,25)"，月份從 0 起算，要轉回 YYYY-MM-DD
 function cellVal(cell){
@@ -568,7 +566,8 @@ function fallback(msg){
 
 (async function init(){
   try{
-    const th = await readSheet('themes').catch(() => []);
+    const th = await readSheet('themes')
+      .catch(e => { console.warn('讀不到 themes 分頁：', e); return []; });
     const row = th.find(r => r.theme_id === 'silicon-photonics') || th[0];
     if(row){
       document.getElementById('themeName').textContent = row['正名'] || '矽光子';
@@ -576,7 +575,8 @@ function fallback(msg){
       document.getElementById('themeAlias').textContent =
         al.length ? '別名 ' + al.join('、') : '';
     }
-    const co = await readSheet('companies').catch(() => []);
+    const co = await readSheet('companies')
+      .catch(e => { console.warn('讀不到 companies 分頁：', e); return []; });
     co.forEach(r => { if(r.ticker) INFO[r.ticker] = r; });
     SIGNALS = await readSheet('signals');
     if(!SIGNALS.length){ fallback('signals 分頁還沒有資料'); return; }
