@@ -176,12 +176,14 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
     <div class="sec-h">題材曝險</div>
     <div class="stat" id="dStat"></div>
     <div id="dSigs"></div>
+    <div id="dOther"></div>
     <p class="nodisc" id="dRev"></p>
   </div>
 </div>
 
 <script>
 const SHEET_ID = '1-6j_9R8EtIS780FRKBv4MPAq63ySaBghRSPW2rDA48U';
+const THEME = 'silicon-photonics';   // 本頁只算這個題材的訊號
 const TIERS = [
   {k:'L4', name:'不可逆', hint:'錢已花掉'},
   {k:'L3', name:'已投入', hint:'資源已投，撤回有損失'},
@@ -234,10 +236,11 @@ function parseTSV(text){
 const NAMES = {'3081':'聯亞','6442':'光聖','3008':'大立光','3363':'上詮','3362':'先進光','3380':'明泰','2455':'全新','2330':'台積電'};
 
 function build(){
-  const by = {};
+  const by = {}, elsewhere = {};
   SIGNALS.forEach(s => {
     const t = s.ticker; if(!t) return;
-    (by[t] = by[t] || []).push(s);
+    if(s.theme_id === THEME) (by[t] = by[t] || []).push(s);
+    else (elsewhere[t] = elsewhere[t] || []).push(s);
   });
   COMPANIES = Object.entries(by).map(([ticker, sigs]) => {
     sigs.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
@@ -259,6 +262,7 @@ function build(){
       .filter(v => v && v !== '自營'))];
     return {
       ticker, sigs, maxTier, flags, rev, via,
+      other: (elsewhere[ticker] || []).sort((a,b) => (b.date||'').localeCompare(a.date||'')),
       name: (INFO[ticker] && INFO[ticker].name) || NAMES[ticker] || ticker,
       role: sigs[0].role || '',
       firstL3: l3[0] || null,
@@ -269,7 +273,8 @@ function build(){
 
 function render(){
   const main = document.getElementById('main');
-  const tot = SIGNALS.length, q = SIGNALS.filter(s => s.tier === '?').length;
+  const inTheme = SIGNALS.filter(s => s.theme_id === THEME);
+  const tot = inTheme.length, q = inTheme.filter(s => s.tier === '?').length;
   document.getElementById('tally').innerHTML =
     `<b>${tot}</b> 則訊號 · <b>${COMPANIES.length}</b> 家公司<br>` +
     (q ? `<span class="open">${q} 則待判（${Math.round(q/tot*100)}%）</span>` : '全部已判定');
@@ -323,7 +328,7 @@ function chip(c){
 }
 
 function renderPending(){
-  const rows = SIGNALS.filter(s => s.tier === '?')
+  const rows = SIGNALS.filter(s => s.theme_id === THEME && s.tier === '?')
     .sort((a,b) => (b.date || '').localeCompare(a.date || ''));
   const el = document.getElementById('pending');
   if(!rows.length){ el.innerHTML = ''; return; }
@@ -381,6 +386,13 @@ function openDetail(ticker){
           ${s.verified === 'no' ? ' · 未驗證' : ''}</div>
       </div>
     </div>`).join('');
+  document.getElementById('dOther').innerHTML = c.other.length
+    ? `<div class="sec-h">其他題材（不計入本頁階層）</div>` + c.other.map(s => `
+        <div class="sig">
+          <div class="sig-l">${s.date}<b>${s.tier} ${s.theme_id}</b></div>
+          <div><div class="sig-c">${s.content}</div></div>
+        </div>`).join('')
+    : '';
   document.getElementById('dRev').textContent =
     c.rev ? `營收狀態：${c.rev}` : '營收狀態：尚無營收';
   document.getElementById('detail').dataset.open = 'true';
