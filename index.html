@@ -251,10 +251,18 @@ async function readSheet(name){
   const m = txt.match(/setResponse\(([\s\S]*?)\);?\s*$/);
   if(!m) throw new Error('回應格式不符');
   const t = JSON.parse(m[1]).table;
-  const cols = t.cols.map(c => (c.label || '').trim());
-  return t.rows.map(r => {
+  let cols = t.cols.map(c => (c.label || '').trim());
+  let rows = t.rows || [];
+  // 全文字的分頁 gviz 認不出標題列，欄位名會是空的或 A、B、C。
+  // 這時把第一列資料當標題，其餘往後推一列。
+  const generic = cols.every(c => !c || /^[A-Z]{1,2}$/.test(c));
+  if(generic && rows.length){
+    cols = (rows[0].c || []).map(c => (c && c.v != null ? String(c.v).trim() : ''));
+    rows = rows.slice(1);
+  }
+  return rows.map(r => {
     const o = {};
-    cols.forEach((c, i) => { o[c] = cellVal(r.c && r.c[i]); });
+    cols.forEach((c, i) => { if(c) o[c] = cellVal(r.c && r.c[i]); });
     return o;
   }).filter(o => o.ticker || o.theme_id);
 }
