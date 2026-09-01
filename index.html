@@ -186,6 +186,16 @@ let SIGNALS = [], COMPANIES = [], MODE = 'all';
 const gviz = sheet =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}`;
 
+// gviz 會把日期欄回成 "Date(2026,7,25)"，月份從 0 起算，要轉回 YYYY-MM-DD
+function cellVal(cell){
+  if(!cell || cell.v == null) return '';
+  if(typeof cell.v === 'string'){
+    const d = cell.v.match(/^Date\((\d+),(\d+),(\d+)/);
+    if(d) return `${d[1]}-${String(+d[2]+1).padStart(2,'0')}-${String(+d[3]).padStart(2,'0')}`;
+  }
+  return String(cell.v).trim();
+}
+
 async function readSheet(name){
   const txt = await fetch(gviz(name)).then(r => r.text());
   const m = txt.match(/setResponse\(([\s\S]*?)\);?\s*$/);
@@ -194,10 +204,7 @@ async function readSheet(name){
   const cols = t.cols.map(c => (c.label || '').trim());
   return t.rows.map(r => {
     const o = {};
-    cols.forEach((c, i) => {
-      const cell = r.c && r.c[i];
-      o[c] = cell && cell.v != null ? String(cell.v).trim() : '';
-    });
+    cols.forEach((c, i) => { o[c] = cellVal(r.c && r.c[i]); });
     return o;
   }).filter(o => o.ticker || o.theme_id);
 }
@@ -227,7 +234,11 @@ function build(){
     const l3 = sigs.filter(s => /^L[3-5]$/.test(s.tier)).map(s => s.date).filter(Boolean).sort();
     const flags = [];
     if(held.has('L4') && !held.has('L3')) flags.push({t:'跳階'});
-    if(held.has('L3') && !held.has('L2')) flags.push({t:'靜默投入', hot:true});
+    // 靜默投入＝已投入但公司從沒公開講過。看的是有無公司自述訊號，不是有無 L2 那一階，
+    // 否則同一場法說會既揭露資本支出（L4）又是表態（L2）時會誤判。
+    const spoke = sigs.some(s => s.speaker === '公司自述');
+    const invested = [...held].some(t => rank(t) >= rank('L3'));
+    if(invested && !spoke) flags.push({t:'靜默投入', hot:true});
     const l1n = sigs.filter(s => s.tier === 'L1').length;
     if(maxTier && rank(maxTier) <= rank('L2') && l1n >= 4) flags.push({t:'倒掛（依 L1 訊號量推估）'});
     return {
