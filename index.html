@@ -41,6 +41,19 @@ h1{font-size:30px;font-weight:600;letter-spacing:-.01em;margin:0}
 .tally b{font-weight:600;font-variant-numeric:tabular-nums}
 .tally .open{color:var(--open);font-weight:600}
 
+.search{display:flex;gap:8px;margin:22px 0 0;max-width:420px}
+.search input{
+  flex:1;font:inherit;font-size:14px;padding:9px 12px;
+  border:1px solid var(--rule);border-radius:3px;background:var(--card);color:var(--ink);
+}
+.search input:focus{outline:2px solid var(--open);outline-offset:1px;border-color:transparent}
+.search button{appearance:none;font:inherit;font-size:14px;padding:9px 16px;border:0;border-radius:3px;background:var(--ink);color:#fff;cursor:pointer}
+.search button:focus-visible{outline:2px solid var(--open);outline-offset:2px}
+.miss{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:20px 22px;margin-top:20px}
+.miss h3{margin:0 0 6px;font-size:16px;font-weight:600}
+.miss p{margin:0 0 14px;font-size:13.5px;color:var(--ink-soft);max-width:58ch}
+.miss .btn{margin-top:0}
+.copied{font-size:12.5px;color:var(--open);margin-left:10px}
 .modes{display:flex;gap:0;margin:28px 0 4px;border-bottom:1px solid var(--rule)}
 .modes button{
   appearance:none;background:none;border:0;padding:8px 2px;margin-right:26px;
@@ -156,6 +169,12 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
     <div class="tally" id="tally"></div>
   </div>
 
+  <div class="search">
+    <input id="q" type="search" inputmode="numeric" placeholder="輸入股票代號，例如 3362"
+           aria-label="股票代號">
+    <button id="go">查</button>
+  </div>
+
   <div class="modes" role="tablist">
     <button role="tab" aria-selected="true" data-mode="all">全部公司</button>
     <button role="tab" aria-selected="false" data-mode="recent">近半年升上 L3</button>
@@ -163,6 +182,7 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
 
   <div id="main"></div>
 
+  <div id="miss"></div>
   <div id="pending"></div>
 </div>
 
@@ -395,17 +415,57 @@ function openDetail(ticker){
     : '';
   document.getElementById('dRev').textContent =
     c.rev ? `營收狀態：${c.rev}` : '營收狀態：尚無營收';
+  location.hash = ticker;
   document.getElementById('detail').dataset.open = 'true';
   document.getElementById('dClose').focus();
 }
 
-document.getElementById('dClose').onclick =
-  () => document.getElementById('detail').dataset.open = 'false';
+// 查代號：有資料就開個股頁，沒有就給即時查詢的 prompt
+function lookup(){
+  const t = document.getElementById('q').value.trim();
+  if(!t) return;
+  const hit = COMPANIES.find(c => c.ticker === t);
+  document.getElementById('miss').innerHTML = '';
+  if(hit){ location.hash = t; openDetail(t); return; }
+  const name = (INFO[t] && INFO[t].name) || '';
+  document.getElementById('miss').innerHTML = `
+    <div class="miss">
+      <h3>${t}${name ? ' ' + name : ''} 還沒判過</h3>
+      <p>這個代號在資料庫裡沒有訊號。按下面的按鈕複製指令，貼進 Claude 對話，
+         把回傳的 TSV 貼回 signals 分頁，重新整理就查得到了。</p>
+      <button class="btn" id="cp">複製查詢指令</button><span class="copied" id="cpMsg"></span>
+    </div>`;
+  document.getElementById('cp').onclick = async () => {
+    const p = `依附件的階梯判定表 v2，分析 ${t} 在矽光子（silicon-photonics）的曝險。
+
+要求：
+- 只列近 12 個月、有公開出處的訊號
+- 每則標 tier（L1–L4 或 ?）、revenue、signal_type、speaker、parent_relation
+- 判不出階層的標 ?，在 content 註明卡在哪個定義，不要勉強給
+- 數字沒把握就留空，不要推估
+- 順便給 companies 分頁的本業資料（主要產品、營收組合、EPS、營益率、毛利率）
+- 輸出 TSV，欄序：date ticker theme_id role parent_relation tier revenue signal_type content value source_url source_type speaker event_id origin verified captured_at
+- origin 填 chat，verified 填 no`;
+    try{ await navigator.clipboard.writeText(p);
+         document.getElementById('cpMsg').textContent = '已複製'; }
+    catch{ document.getElementById('cpMsg').textContent = '複製失敗，請手動選取'; }
+  };
+}
+document.getElementById('go').onclick = lookup;
+document.getElementById('q').addEventListener('keydown', e => {
+  if(e.key === 'Enter') lookup();
+});
+
+function closeDetail(){
+  document.getElementById('detail').dataset.open = 'false';
+  if(location.hash) history.replaceState(null, '', location.pathname);
+}
+document.getElementById('dClose').onclick = closeDetail;
 document.getElementById('detail').addEventListener('click', e => {
-  if(e.target.id === 'detail') e.currentTarget.dataset.open = 'false';
+  if(e.target.id === 'detail') closeDetail();
 });
 document.addEventListener('keydown', e => {
-  if(e.key === 'Escape') document.getElementById('detail').dataset.open = 'false';
+  if(e.key === 'Escape') closeDetail();
 });
 document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.modes button').forEach(x => x.setAttribute('aria-selected', 'false'));
@@ -444,6 +504,8 @@ function fallback(msg){
     SIGNALS = await readSheet('signals');
     if(!SIGNALS.length){ fallback('signals 分頁還沒有資料'); return; }
     build(); render();
+    const h = decodeURIComponent(location.hash.replace('#',''));
+    if(h && COMPANIES.some(c => c.ticker === h)) openDetail(h);
   }catch(err){
     fallback('讀不到 Google Sheet（' + err.message + '）');
   }
