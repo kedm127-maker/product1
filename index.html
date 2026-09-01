@@ -57,9 +57,8 @@ h1{font-size:30px;font-weight:600;letter-spacing:-.01em;margin:0}
 .rung-label{padding-top:2px}
 .rung-tier{display:flex;align-items:baseline;gap:7px}
 .bar{width:22px;height:9px;border-radius:1px;flex:none;position:relative;top:-1px}
-.t5 .bar{background:var(--shade5)} .t4 .bar{background:var(--shade4)}
-.t3 .bar{background:var(--shade3)} .t2 .bar{background:var(--shade2)}
-.t1 .bar{background:var(--shade1)}
+.t4 .bar{background:var(--shade5)} .t3 .bar{background:var(--shade4)}
+.t2 .bar{background:var(--shade3)} .t1 .bar{background:var(--shade2)}
 .rung-tier span{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
 .rung-name{font-size:12.5px;color:var(--muted);margin-top:1px;padding-left:29px}
 .rung-body{display:flex;flex-wrap:wrap;gap:8px}
@@ -165,19 +164,20 @@ textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,m
     <p class="sub" id="dSub"></p>
     <div class="stat" id="dStat"></div>
     <div id="dSigs"></div>
-    <p class="nodisc">佔營收比重：未單獨揭露</p>
+    <p class="nodisc" id="dRev"></p>
   </div>
 </div>
 
 <script>
 const SHEET_ID = '1-6j_9R8EtIS780FRKBv4MPAq63ySaBghRSPW2rDA48U';
 const TIERS = [
-  {k:'L5', name:'已揭露', hint:'分部營收有數字'},
   {k:'L4', name:'不可逆', hint:'錢已花掉'},
   {k:'L3', name:'已投入', hint:'資源已投，撤回有損失'},
   {k:'L2', name:'已表態', hint:'只是話，可以改口'},
   {k:'L1', name:'零成本', hint:'公司自己沒動過'},
 ];
+// 營收獨立於階梯之外：階梯排投入成本，營收排揭露階段
+const REV_RANK = {'已單獨揭露':3, '有但未單獨揭露':2, '':1};
 const rank = t => TIERS.length - TIERS.findIndex(x => x.k === t);
 const DAY = 864e5;
 
@@ -241,8 +241,12 @@ function build(){
     if(invested && !spoke) flags.push({t:'靜默投入', hot:true});
     const l1n = sigs.filter(s => s.tier === 'L1').length;
     if(maxTier && rank(maxTier) <= rank('L2') && l1n >= 4) flags.push({t:'倒掛（依 L1 訊號量推估）'});
+    const rev = sigs.map(s => s.revenue).filter(Boolean)
+      .sort((a,b) => (REV_RANK[b]||0) - (REV_RANK[a]||0))[0] || '';
+    const via = [...new Set(sigs.map(s => s.parent_relation)
+      .filter(v => v && v !== '自營'))];
     return {
-      ticker, sigs, maxTier, flags,
+      ticker, sigs, maxTier, flags, rev, via,
       name: sigs[0].company || NAMES[ticker] || ticker,
       role: sigs[0].role || '',
       firstL3: l3[0] || null,
@@ -275,7 +279,7 @@ function render(){
     const body = here.length
       ? here.map(c => chip(c)).join('')
       : `<div class="empty-rung">這一階沒有公司</div>`;
-    return `<div class="rung t${5-i}">
+    return `<div class="rung t${4-i}">
       <div class="rung-label">
         <div class="rung-tier"><i class="bar"></i><span>${T.k} ${T.name}</span></div>
         <div class="rung-name">${T.hint}</div>
@@ -292,8 +296,10 @@ function render(){
 function chip(c){
   const bits = [];
   if(c.role) bits.push(c.role);
+  bits.push(c.rev ? `營收${c.rev}` : '尚無營收');
   bits.push(`${c.sigs.length} 則`);
   if(c.firstL3) bits.push(`達 L3 ${c.firstL3}`);
+  c.via.forEach(v => bits.push(v));
   return `<button class="chip" data-t="${c.ticker}">
     <span class="chip-top"><span class="chip-name">${c.name}</span><span class="chip-tick">${c.ticker}</span></span>
     <span class="chip-meta">${bits.join(' · ')}</span>
@@ -343,6 +349,8 @@ function openDetail(ticker){
           ${s.verified === 'no' ? ' · 未驗證' : ''}</div>
       </div>
     </div>`).join('');
+  document.getElementById('dRev').textContent =
+    c.rev ? `營收狀態：${c.rev}` : '營收狀態：尚無營收';
   document.getElementById('detail').dataset.open = 'true';
   document.getElementById('dClose').focus();
 }
