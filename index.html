@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>題材曝險追蹤</title>
+<style>
+:root{
+  --paper:#E7EBED;
+  --card:#FFFFFF;
+  --ink:#14232E;
+  --ink-soft:#4A5C68;
+  --muted:#7C8B95;
+  --rule:#C6D0D5;
+  --rule-soft:#DFE5E8;
+  --open:#6B4EA0;
+  --open-bg:#EFEAF7;
+  --shade5:#14232E;
+  --shade4:#2E4655;
+  --shade3:#51707F;
+  --shade2:#8AA2AD;
+  --shade1:#BECBD2;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  font-size:15px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:960px;margin:0 auto;padding:48px 24px 96px}
+
+/* ---- header ---- */
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;justify-content:space-between;margin-bottom:6px}
+h1{font-size:30px;font-weight:600;letter-spacing:-.01em;margin:0}
+.alias{color:var(--muted);font-size:13px;margin:4px 0 0}
+.tally{font-size:13px;color:var(--ink-soft);text-align:right;line-height:1.7}
+.tally b{font-weight:600;font-variant-numeric:tabular-nums}
+.tally .open{color:var(--open);font-weight:600}
+
+.modes{display:flex;gap:0;margin:28px 0 4px;border-bottom:1px solid var(--rule)}
+.modes button{
+  appearance:none;background:none;border:0;padding:8px 2px;margin-right:26px;
+  font:inherit;font-size:14px;color:var(--muted);cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.modes button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+.modes button:focus-visible{outline:2px solid var(--open);outline-offset:2px}
+
+/* ---- ladder ---- */
+.ladder{margin-top:26px;border-top:1px solid var(--rule)}
+.rung{display:grid;grid-template-columns:132px 1fr;gap:20px;border-bottom:1px solid var(--rule-soft);padding:16px 0;align-items:start}
+.rung:last-child{border-bottom:1px solid var(--rule)}
+.rung-label{padding-top:2px}
+.rung-tier{display:flex;align-items:baseline;gap:7px}
+.bar{width:22px;height:9px;border-radius:1px;flex:none;position:relative;top:-1px}
+.t5 .bar{background:var(--shade5)} .t4 .bar{background:var(--shade4)}
+.t3 .bar{background:var(--shade3)} .t2 .bar{background:var(--shade2)}
+.t1 .bar{background:var(--shade1)}
+.rung-tier span{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.rung-name{font-size:12.5px;color:var(--muted);margin-top:1px;padding-left:29px}
+.rung-body{display:flex;flex-wrap:wrap;gap:8px}
+
+.chip{
+  appearance:none;font:inherit;text-align:left;cursor:pointer;
+  background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:9px 13px;min-width:158px;
+}
+.chip:hover{border-color:var(--ink-soft)}
+.chip:focus-visible{outline:2px solid var(--open);outline-offset:2px}
+.chip-top{display:flex;align-items:baseline;gap:7px}
+.chip-name{font-weight:600;font-size:15px}
+.chip-tick{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.chip-meta{font-size:12px;color:var(--ink-soft);margin-top:3px}
+.chip-flags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.flag{font-size:11px;padding:2px 7px;border-radius:2px;border:1px solid var(--rule);color:var(--ink-soft);background:#F4F7F8}
+.flag.hot{border-color:var(--open);color:var(--open);background:var(--open-bg)}
+.pending{font-size:11px;color:var(--open);background:var(--open-bg);padding:2px 7px;border-radius:2px;font-weight:600}
+.empty-rung{font-size:13px;color:var(--muted);padding:9px 0}
+
+/* ---- unresolved list ---- */
+.section-title{font-size:17px;font-weight:600;margin:52px 0 4px}
+.section-note{font-size:13.5px;color:var(--ink-soft);margin:0 0 18px;max-width:62ch}
+.qrow{display:grid;grid-template-columns:88px 1fr;gap:16px;padding:13px 0;border-top:1px solid var(--rule-soft);align-items:start}
+.qrow:last-child{border-bottom:1px solid var(--rule-soft)}
+.qco{font-size:13px}
+.qco b{display:block;font-weight:600}
+.qco span{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+.qtext{font-size:13.5px;line-height:1.55}
+.qdate{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;margin-right:8px}
+a{color:var(--open);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--open)}
+
+/* ---- detail ---- */
+.detail{position:fixed;inset:0;background:rgba(20,35,46,.32);display:none;z-index:20}
+.detail[data-open="true"]{display:block}
+.panel{
+  position:absolute;right:0;top:0;bottom:0;width:min(560px,100%);
+  background:var(--paper);overflow-y:auto;padding:30px 30px 64px;
+  border-left:1px solid var(--rule);
+}
+@media (prefers-reduced-motion:no-preference){
+  .detail[data-open="true"] .panel{animation:slide .18s ease-out}
+  @keyframes slide{from{transform:translateX(14px);opacity:.6}to{transform:none;opacity:1}}
+}
+.panel-close{position:absolute;top:22px;right:26px;appearance:none;background:none;border:0;font:inherit;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;padding:4px}
+.panel-close:focus-visible{outline:2px solid var(--open);outline-offset:2px}
+.panel h2{font-size:22px;margin:0;font-weight:600}
+.panel .sub{color:var(--muted);font-size:13px;margin:3px 0 22px}
+.stat{display:flex;gap:26px;padding:14px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-bottom:24px}
+.stat div{font-size:13px;color:var(--muted)}
+.stat b{display:block;font-size:19px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.sig{display:grid;grid-template-columns:80px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--rule-soft);align-items:start}
+.sig-l{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sig-l b{display:block;color:var(--ink);font-size:12.5px;font-weight:600;margin-top:2px}
+.sig-l b.q{color:var(--open)}
+.sig-c{font-size:13.5px;line-height:1.55}
+.sig-m{font-size:12px;color:var(--muted);margin-top:4px}
+.nodisc{font-size:12.5px;color:var(--muted);margin-top:18px;padding-top:12px;border-top:1px solid var(--rule)}
+
+/* ---- states ---- */
+.state{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:24px;margin-top:26px}
+.state h3{margin:0 0 6px;font-size:16px;font-weight:600}
+.state p{margin:0 0 14px;font-size:13.5px;color:var(--ink-soft);max-width:60ch}
+textarea{width:100%;height:130px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:10px;border:1px solid var(--rule);border-radius:2px;background:#FBFCFC;color:var(--ink);resize:vertical}
+.btn{appearance:none;font:inherit;font-size:14px;margin-top:10px;padding:8px 16px;background:var(--ink);color:#fff;border:0;border-radius:2px;cursor:pointer}
+.btn:focus-visible{outline:2px solid var(--open);outline-offset:2px}
+@media (max-width:640px){
+  .wrap{padding:32px 16px 72px}
+  .rung{grid-template-columns:1fr;gap:10px}
+  .rung-name{padding-left:29px}
+  .chip{min-width:0;width:100%}
+  .qrow{grid-template-columns:1fr;gap:4px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <h1 id="themeName">矽光子</h1>
+      <p class="alias" id="themeAlias"></p>
+    </div>
+    <div class="tally" id="tally"></div>
+  </div>
+
+  <div class="modes" role="tablist">
+    <button role="tab" aria-selected="true" data-mode="all">全部公司</button>
+    <button role="tab" aria-selected="false" data-mode="recent">近半年升上 L3</button>
+  </div>
+
+  <div id="main"></div>
+
+  <div id="pending"></div>
+</div>
+
+<div class="detail" id="detail" data-open="false">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="dTitle">
+    <button class="panel-close" id="dClose" aria-label="關閉">&times;</button>
+    <h2 id="dTitle"></h2>
+    <p class="sub" id="dSub"></p>
+    <div class="stat" id="dStat"></div>
+    <div id="dSigs"></div>
+    <p class="nodisc">佔營收比重：未單獨揭露</p>
+  </div>
+</div>
+
+<script>
+const SHEET_ID = '1-6j_9R8EtIS780FRKBv4MPAq63ySaBghRSPW2rDA48U';
+const TIERS = [
+  {k:'L5', name:'已揭露', hint:'分部營收有數字'},
+  {k:'L4', name:'不可逆', hint:'錢已花掉'},
+  {k:'L3', name:'已投入', hint:'資源已投，撤回有損失'},
+  {k:'L2', name:'已表態', hint:'只是話，可以改口'},
+  {k:'L1', name:'零成本', hint:'公司自己沒動過'},
+];
+const rank = t => TIERS.length - TIERS.findIndex(x => x.k === t);
+const DAY = 864e5;
+
+let SIGNALS = [], COMPANIES = [], MODE = 'all';
+
+const gviz = sheet =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheet}`;
+
+async function readSheet(name){
+  const txt = await fetch(gviz(name)).then(r => r.text());
+  const m = txt.match(/setResponse\(([\s\S]*?)\);?\s*$/);
+  if(!m) throw new Error('回應格式不符');
+  const t = JSON.parse(m[1]).table;
+  const cols = t.cols.map(c => (c.label || '').trim());
+  return t.rows.map(r => {
+    const o = {};
+    cols.forEach((c, i) => {
+      const cell = r.c && r.c[i];
+      o[c] = cell && cell.v != null ? String(cell.v).trim() : '';
+    });
+    return o;
+  }).filter(o => o.ticker || o.theme_id);
+}
+
+function parseTSV(text){
+  const lines = text.trim().split('\n');
+  const cols = lines[0].split('\t').map(s => s.trim());
+  return lines.slice(1).map(l => {
+    const c = l.split('\t'); const o = {};
+    cols.forEach((k, i) => o[k] = (c[i] || '').trim());
+    return o;
+  }).filter(o => o.ticker);
+}
+
+const NAMES = {'3081':'聯亞','6442':'光聖','3008':'大立光','3363':'上詮','3362':'先進光','3380':'明泰','2455':'全新','2330':'台積電'};
+
+function build(){
+  const by = {};
+  SIGNALS.forEach(s => {
+    const t = s.ticker; if(!t) return;
+    (by[t] = by[t] || []).push(s);
+  });
+  COMPANIES = Object.entries(by).map(([ticker, sigs]) => {
+    sigs.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+    const held = new Set(sigs.map(s => s.tier).filter(t => /^L[1-5]$/.test(t)));
+    const maxTier = [...held].sort((a,b) => rank(b) - rank(a))[0] || null;
+    const l3 = sigs.filter(s => /^L[3-5]$/.test(s.tier)).map(s => s.date).filter(Boolean).sort();
+    const flags = [];
+    if(held.has('L4') && !held.has('L3')) flags.push({t:'跳階'});
+    if(held.has('L3') && !held.has('L2')) flags.push({t:'靜默投入', hot:true});
+    const l1n = sigs.filter(s => s.tier === 'L1').length;
+    if(maxTier && rank(maxTier) <= rank('L2') && l1n >= 4) flags.push({t:'倒掛（依 L1 訊號量推估）'});
+    return {
+      ticker, sigs, maxTier, flags,
+      name: sigs[0].company || NAMES[ticker] || ticker,
+      role: sigs[0].role || '',
+      firstL3: l3[0] || null,
+      pending: sigs.filter(s => s.tier === '?').length,
+    };
+  });
+}
+
+function render(){
+  const main = document.getElementById('main');
+  const tot = SIGNALS.length, q = SIGNALS.filter(s => s.tier === '?').length;
+  document.getElementById('tally').innerHTML =
+    `<b>${tot}</b> 則訊號 · <b>${COMPANIES.length}</b> 家公司<br>` +
+    (q ? `<span class="open">${q} 則待判（${Math.round(q/tot*100)}%）</span>` : '全部已判定');
+
+  let list = COMPANIES;
+  if(MODE === 'recent'){
+    const cut = Date.now() - 180 * DAY;
+    list = COMPANIES.filter(c => c.firstL3 && Date.parse(c.firstL3) >= cut);
+    if(!list.length){
+      main.innerHTML = `<div class="state"><h3>近半年沒有公司升上 L3</h3>
+        <p>視窗設為 180 天。若這裡長期是空的，把視窗放寬到 12 個月，不要改成「近半年有任何訊號」——那會退回媒體聲量榜。</p></div>`;
+      renderPending(); return;
+    }
+  }
+
+  main.innerHTML = '<div class="ladder">' + TIERS.map((T, i) => {
+    const here = list.filter(c => c.maxTier === T.k)
+                     .sort((a,b) => (b.firstL3 || '').localeCompare(a.firstL3 || ''));
+    const body = here.length
+      ? here.map(c => chip(c)).join('')
+      : `<div class="empty-rung">這一階沒有公司</div>`;
+    return `<div class="rung t${5-i}">
+      <div class="rung-label">
+        <div class="rung-tier"><i class="bar"></i><span>${T.k} ${T.name}</span></div>
+        <div class="rung-name">${T.hint}</div>
+      </div>
+      <div class="rung-body">${body}</div>
+    </div>`;
+  }).join('') + '</div>';
+
+  main.querySelectorAll('.chip').forEach(b =>
+    b.addEventListener('click', () => openDetail(b.dataset.t)));
+  renderPending();
+}
+
+function chip(c){
+  const bits = [];
+  if(c.role) bits.push(c.role);
+  bits.push(`${c.sigs.length} 則`);
+  if(c.firstL3) bits.push(`達 L3 ${c.firstL3}`);
+  return `<button class="chip" data-t="${c.ticker}">
+    <span class="chip-top"><span class="chip-name">${c.name}</span><span class="chip-tick">${c.ticker}</span></span>
+    <span class="chip-meta">${bits.join(' · ')}</span>
+    ${(c.flags.length || c.pending) ? `<span class="chip-flags">
+      ${c.flags.map(f => `<span class="flag${f.hot ? ' hot' : ''}">${f.t}</span>`).join('')}
+      ${c.pending ? `<span class="pending">${c.pending} 則待判</span>` : ''}
+    </span>` : ''}
+  </button>`;
+}
+
+function renderPending(){
+  const rows = SIGNALS.filter(s => s.tier === '?')
+    .sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+  const el = document.getElementById('pending');
+  if(!rows.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<h2 class="section-title">待判清單</h2>
+    <p class="section-note">判定表對這些訊號沒有給出答案。修規則之前不要硬塞階層——這份清單就是規則要補的地方。</p>` +
+    rows.map(s => {
+      const nm = NAMES[s.ticker] || s.ticker;
+      return `<div class="qrow">
+        <div class="qco"><b>${nm}</b><span>${s.ticker}</span></div>
+        <div class="qtext"><span class="qdate">${s.date}</span>${s.content}
+          ${s.source_url ? ` <a href="${s.source_url}" target="_blank" rel="noopener">出處</a>` : ''}</div>
+      </div>`;
+    }).join('');
+}
+
+function openDetail(ticker){
+  const c = COMPANIES.find(x => x.ticker === ticker); if(!c) return;
+  document.getElementById('dTitle').textContent = `${c.name} ${c.ticker}`;
+  document.getElementById('dSub').textContent =
+    [c.role, '矽光子曝險'].filter(Boolean).join(' · ');
+  const t = c.maxTier ? TIERS.find(x => x.k === c.maxTier) : null;
+  document.getElementById('dStat').innerHTML = `
+    <div>最高已達成<b>${t ? t.k + ' ' + t.name : '—'}</b></div>
+    <div>首次達 L3<b>${c.firstL3 || '—'}</b></div>
+    <div>訊號<b>${c.sigs.length}</b></div>
+    <div>待判<b>${c.pending}</b></div>`;
+  document.getElementById('dSigs').innerHTML = c.sigs.map(s => `
+    <div class="sig">
+      <div class="sig-l">${s.date}<b class="${s.tier === '?' ? 'q' : ''}">${s.tier} ${s.signal_type || ''}</b></div>
+      <div>
+        <div class="sig-c">${s.content}${s.value ? `（${s.value}）` : ''}</div>
+        <div class="sig-m">${[s.source_type, s.speaker && s.speaker !== '—' ? s.speaker : '']
+          .filter(Boolean).join(' · ')}
+          ${s.source_url ? ` · <a href="${s.source_url}" target="_blank" rel="noopener">出處</a>` : ''}
+          ${s.verified === 'no' ? ' · 未驗證' : ''}</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('detail').dataset.open = 'true';
+  document.getElementById('dClose').focus();
+}
+
+document.getElementById('dClose').onclick =
+  () => document.getElementById('detail').dataset.open = 'false';
+document.getElementById('detail').addEventListener('click', e => {
+  if(e.target.id === 'detail') e.currentTarget.dataset.open = 'false';
+});
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') document.getElementById('detail').dataset.open = 'false';
+});
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.modes button').forEach(x => x.setAttribute('aria-selected', 'false'));
+  b.setAttribute('aria-selected', 'true');
+  MODE = b.dataset.mode; render();
+});
+
+function fallback(msg){
+  document.getElementById('main').innerHTML = `<div class="state">
+    <h3>${msg}</h3>
+    <p>把 signals 分頁的內容（含標題列）複製貼進來，一樣看得到結果。這個框之後也是 Claude 輸出 TSV 的入口。</p>
+    <textarea id="paste" placeholder="date&#9;ticker&#9;theme_id&#9;..."></textarea>
+    <button class="btn" id="loadPaste">載入這些訊號</button>
+  </div>`;
+  document.getElementById('loadPaste').onclick = () => {
+    try{
+      SIGNALS = parseTSV(document.getElementById('paste').value);
+      if(!SIGNALS.length) throw new Error('沒有讀到資料列');
+      build(); render();
+    }catch(err){ alert('讀取失敗：' + err.message); }
+  };
+}
+
+(async function init(){
+  try{
+    const th = await readSheet('themes').catch(() => []);
+    const row = th.find(r => r.theme_id === 'silicon-photonics') || th[0];
+    if(row){
+      document.getElementById('themeName').textContent = row['正名'] || '矽光子';
+      const al = (row['別名'] || '').split(',').map(s => s.trim()).filter(Boolean);
+      document.getElementById('themeAlias').textContent =
+        al.length ? '別名 ' + al.join('、') : '';
+    }
+    SIGNALS = await readSheet('signals');
+    if(!SIGNALS.length){ fallback('signals 分頁還沒有資料'); return; }
+    build(); render();
+  }catch(err){
+    fallback('讀不到 Google Sheet（' + err.message + '）');
+  }
+})();
+</script>
+</body>
+</html>
