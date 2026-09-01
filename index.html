@@ -568,16 +568,12 @@ function fallback(msg){
   try{
     const th = await readSheet('themes')
       .catch(e => { console.warn('讀不到 themes 分頁：', e); return []; });
-    const row = th.find(r => r.theme_id === 'silicon-photonics') || th[0];
-    if(row){
-      document.getElementById('themeName').textContent = row['正名'] || '矽光子';
-      const al = (row['別名'] || '').split(',').map(s => s.trim()).filter(Boolean);
-      document.getElementById('themeAlias').textContent =
-        al.length ? '別名 ' + al.join('、') : '';
-    }
+    th.forEach(r => { if(r.theme_id) THEMES[r.theme_id] = r; });
+    console.log('themes 讀到', th.length, '列', THEMES);
     const co = await readSheet('companies')
       .catch(e => { console.warn('讀不到 companies 分頁：', e); return []; });
     co.forEach(r => { if(r.ticker) INFO[r.ticker] = r; });
+    console.log('companies 讀到', co.length, '列');
     SIGNALS = await readSheet('signals');
     if(!SIGNALS.length){ fallback('signals 分頁還沒有資料'); return; }
     initThemes();
