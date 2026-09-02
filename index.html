@@ -475,13 +475,18 @@ function openDetail(ticker){
         <span class="cum"><s>累計</s> ${pct0(f.cum_op_margin, true)}</span></div>
       <div>單季毛利率 ${num(f.gross_margin, true)}
         <span class="cum"><s>累計</s> ${pct0(f.cum_gross_margin, true)}</span></div>
-      <div>近四季 EPS ${num(f.eps_ttm)}</div>
-      <div>股價 ${num(f.price)}</div>
+      <div>近四季 EPS ${num(f.eps_ttm)}
+        <span class="cum"><s>資料日</s> ${f.manual_as_of || '—'}</span></div>
+      <div>股價 ${num(f.price)}
+        <span class="cum"><s>資料日</s> ${f.manual_as_of || '—'}</span></div>
     </div>
     ${lowTier ? '<div class="biz-note">數字來自第 4 級來源（研究機構／整理數據），未經一手揭露確認</div>' : ''}
     ${f.note ? `<div class="biz-note">${f.note}</div>` : ''}
-    ${f.source_url ? `<div class="biz-note"><a href="${f.source_url}" target="_blank" rel="noopener">出處</a>
-      ${f.as_of ? ` · 資料日 ${f.as_of}` : ''}${f.verified === 'no' ? ' · 未驗證' : ''}</div>` : ''}`
+    <div class="biz-note">
+      ${f.source_url ? `<a href="${f.source_url}" target="_blank" rel="noopener">出處</a> · ` : ''}
+      財務數字 ${f.fin_as_of || f.as_of || '—'}（${f.verified === 'api' ? '官方 API' : '未驗證'}）
+      ${(f.price || f.eps_ttm) ? ` · 股價與近四季 ${f.manual_as_of || '日期不明'}（對話產出）` : ''}
+    </div>`
     : '<div class="biz-note">companies 分頁沒有這家公司的資料</div>';
   // 所有題材一視同仁，當前題材排最前面
   const all = {};
