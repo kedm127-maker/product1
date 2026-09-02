@@ -139,6 +139,9 @@ a:hover{border-bottom-color:var(--open)}
 .biz-mix{font-size:12.5px;color:var(--ink-soft);margin-top:5px;line-height:1.7}
 .biz-fin{display:flex;flex-wrap:wrap;gap:22px;margin-top:12px}
 .biz-fin div{font-size:12px;color:var(--muted)}
+.biz-fin .cum{display:block;font-size:12px;font-weight:400;color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;margin-top:2px}
+.biz-fin .cum s{text-decoration:none;color:var(--muted);font-size:11px}
 .biz-fin b{display:block;font-size:17px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;margin-top:1px}
 .biz-fin b.neg{color:var(--open)}
 .biz-fin b.lowtier{color:var(--muted);border-bottom:1px dotted var(--rule-strong,var(--muted))}
@@ -450,6 +453,12 @@ function openDetail(ticker){
     return Number.isFinite(n) ? (n * 100).toFixed(2).replace(/\.00$/, '') + '%' : t;
   };
   const lowTier = Number(f && f.source_tier) >= 4;
+  // 累計值：與單季分開顯示，不做回退。單季空白代表「還在累積」，
+  // 用累計值填滿會把那個狀態藏起來。
+  const pct0 = (v, asPct) => {
+    const t = asPct ? pct(v) : String(v || '').trim();
+    return t || '—';
+  };
   const num = (v, asPct) => {
     const t = asPct ? pct(v) : String(v || '').trim();
     if(!t) return '<b>—</b>';
@@ -460,10 +469,13 @@ function openDetail(ticker){
     <div class="biz-main">${f.main_business || '—'}</div>
     ${f.business_mix ? `<div class="biz-mix">${f.business_mix}</div>` : ''}
     <div class="biz-fin">
-      <div>${f.quarter || ''} EPS ${num(f.eps_q)}</div>
+      <div>${f.quarter || ''} 單季 EPS ${num(f.eps_q)}
+        <span class="cum"><s>累計</s> ${pct0(f.cum_eps)}</span></div>
+      <div>單季營益率 ${num(f.op_margin, true)}
+        <span class="cum"><s>累計</s> ${pct0(f.cum_op_margin, true)}</span></div>
+      <div>單季毛利率 ${num(f.gross_margin, true)}
+        <span class="cum"><s>累計</s> ${pct0(f.cum_gross_margin, true)}</span></div>
       <div>近四季 EPS ${num(f.eps_ttm)}</div>
-      <div>營益率 ${num(f.op_margin, true)}</div>
-      <div>毛利率 ${num(f.gross_margin, true)}</div>
       <div>股價 ${num(f.price)}</div>
     </div>
     ${lowTier ? '<div class="biz-note">數字來自第 4 級來源（研究機構／整理數據），未經一手揭露確認</div>' : ''}
